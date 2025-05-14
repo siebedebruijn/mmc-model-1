@@ -820,6 +820,139 @@ def analyze_annual_battery_empty():
     
     return daily_avg
 
+def analyze_battery_c_rates():
+    # Read the cleaned data
+    df = pd.read_csv('cleaned_data.csv')
+    
+    # Convert Time to datetime
+    df['Time'] = pd.to_datetime(df['Time'])
+    
+    # Convert negative production values to positive
+    df['Pprod(W)'] = df['Pprod(W)'].abs()
+    
+    # Calculate the net power flow (positive = charging, negative = discharging)
+    df['Net_Power_W'] = df['Pprod(W)'] - df['Pdemand(W)']
+    
+    # Define battery capacities for daily and seasonal storage
+    DAILY_BATTERY_CAPACITY_WH = 650 * 1000  # 650 kWh in Wh (from battery_sizing_analysis)
+    SEASONAL_BATTERY_CAPACITY_WH = 40 * 1000 * 1000  # 40 MWh in Wh (from seasonal_storage_analysis)
+    
+    # Calculate C-rates
+    df['Daily_C_Rate'] = abs(df['Net_Power_W']) / DAILY_BATTERY_CAPACITY_WH
+    df['Seasonal_C_Rate'] = abs(df['Net_Power_W']) / SEASONAL_BATTERY_CAPACITY_WH
+    
+    # Get overall statistics
+    max_daily_c_rate = df['Daily_C_Rate'].max()
+    max_seasonal_c_rate = df['Seasonal_C_Rate'].max()
+    avg_daily_c_rate = df['Daily_C_Rate'].mean()
+    avg_seasonal_c_rate = df['Seasonal_C_Rate'].mean()
+    
+    # Calculate daily maximum and average C-rates for time series visualization
+    daily_stats = df.groupby(df['Time'].dt.date).agg({
+        'Daily_C_Rate': ['max', 'mean'],
+        'Seasonal_C_Rate': ['max', 'mean'],
+        'Net_Power_W': ['max', 'min', 'mean']
+    }).reset_index()
+    
+    # Create plots
+    plt.figure(figsize=(15, 12))
+    
+    # Plot 1: Daily Storage C-rate (Time Series)
+    plt.subplot(3, 1, 1)
+    plt.plot(daily_stats['Time'], daily_stats[('Daily_C_Rate', 'max')], 'b-', label='Maximum C-rate')
+    plt.plot(daily_stats['Time'], daily_stats[('Daily_C_Rate', 'mean')], 'g-', label='Average C-rate')
+    plt.axhline(y=1, color='r', linestyle='--', label='1C (Full charge/discharge in 1 hour)')
+    plt.axhline(y=0.5, color='orange', linestyle='--', label='0.5C (Full charge/discharge in 2 hours)')
+    plt.axhline(y=0.25, color='purple', linestyle='--', label='0.25C (Full charge/discharge in 4 hours)')
+    plt.title('Daily Storage Battery (650 kWh): Required C-rate Throughout 2023', fontsize=14)
+    plt.xlabel('Date')
+    plt.ylabel('C-rate')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    
+    # Plot 2: Seasonal Storage C-rate (Time Series)
+    plt.subplot(3, 1, 2)
+    plt.plot(daily_stats['Time'], daily_stats[('Seasonal_C_Rate', 'max')], 'b-', label='Maximum C-rate')
+    plt.plot(daily_stats['Time'], daily_stats[('Seasonal_C_Rate', 'mean')], 'g-', label='Average C-rate')
+    plt.axhline(y=0.1, color='r', linestyle='--', label='0.1C (Full charge/discharge in 10 hours)')
+    plt.axhline(y=0.05, color='orange', linestyle='--', label='0.05C (Full charge/discharge in 20 hours)')
+    plt.axhline(y=0.01, color='purple', linestyle='--', label='0.01C (Full charge/discharge in 100 hours)')
+    plt.title('Seasonal Storage Battery (40 MWh): Required C-rate Throughout 2023', fontsize=14)
+    plt.xlabel('Date')
+    plt.ylabel('C-rate')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    
+    # Plot 3: Histogram of required C-rates
+    plt.subplot(3, 1, 3)
+    plt.hist(df['Daily_C_Rate'], bins=50, alpha=0.5, color='blue', label='Daily Storage (650 kWh)')
+    plt.hist(df['Seasonal_C_Rate'], bins=50, alpha=0.5, color='green', label='Seasonal Storage (40 MWh)')
+    plt.title('Distribution of Required C-rates', fontsize=14)
+    plt.xlabel('C-rate')
+    plt.ylabel('Frequency')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    
+    # Adjust layout and save plot
+    plt.tight_layout()
+    plt.savefig('battery_c_rates_analysis.png', dpi=300)
+    
+    # Save calculations to text file
+    with open('battery_c_rates_analysis.txt', 'w') as f:
+        f.write("Battery C-Rate Analysis\n")
+        f.write("=" * 50 + "\n\n")
+        
+        f.write("Daily Storage Battery (650 kWh):\n")
+        f.write("-" * 30 + "\n")
+        f.write(f"Maximum C-rate: {max_daily_c_rate:.4f}C (full charge/discharge in {1/max_daily_c_rate:.2f} hours)\n")
+        f.write(f"Average C-rate: {avg_daily_c_rate:.4f}C (full charge/discharge in {1/avg_daily_c_rate:.2f} hours)\n")
+        f.write("\n")
+        
+        f.write("Seasonal Storage Battery (40 MWh):\n")
+        f.write("-" * 30 + "\n")
+        f.write(f"Maximum C-rate: {max_seasonal_c_rate:.4f}C (full charge/discharge in {1/max_seasonal_c_rate:.2f} hours)\n")
+        f.write(f"Average C-rate: {avg_seasonal_c_rate:.4f}C (full charge/discharge in {1/avg_seasonal_c_rate:.2f} hours)\n")
+        f.write("\n")
+        
+        # Calculate C-rate percentiles for each battery type
+        percentiles = [50, 75, 90, 95, 99]
+        f.write("C-rate Percentiles:\n")
+        f.write("-" * 30 + "\n")
+        f.write("Percentile | Daily Storage | Seasonal Storage\n")
+        f.write("-" * 50 + "\n")
+        
+        for p in percentiles:
+            daily_val = df['Daily_C_Rate'].quantile(p/100)
+            seasonal_val = df['Seasonal_C_Rate'].quantile(p/100)
+            f.write(f"{p:10}% | {daily_val:.4f}C ({1/daily_val:.2f} hrs) | {seasonal_val:.4f}C ({1/seasonal_val:.2f} hrs)\n")
+        
+        # Add insights about the practical implications
+        f.write("\nInsights and Implications:\n")
+        f.write("-" * 30 + "\n")
+        f.write("1. The daily storage battery requires a higher C-rate capability than the seasonal storage battery.\n")
+        f.write("2. For daily cycling, the battery technology should support at least ")
+        daily_95 = df['Daily_C_Rate'].quantile(0.95)
+        f.write(f"{daily_95:.2f}C (95th percentile).\n")
+        f.write(f"3. For seasonal storage, a C-rate of {df['Seasonal_C_Rate'].quantile(0.95):.4f}C would be sufficient for 95% of the time.\n")
+        f.write("4. These C-rate requirements influence the choice of battery chemistry and design.\n")
+        
+        # Add recommendations for battery type
+        f.write("\nBattery Technology Recommendations:\n")
+        f.write("-" * 30 + "\n")
+        if max_daily_c_rate > 1:
+            f.write("Daily Storage: Consider lithium-ion technologies like LFP or NMC that can handle higher C-rates.\n")
+        else:
+            f.write("Daily Storage: Most commercial lithium-ion technologies would be suitable.\n")
+        
+        if max_seasonal_c_rate > 0.2:
+            f.write("Seasonal Storage: Most lithium-ion technologies would be suitable.\n")
+        else:
+            f.write("Seasonal Storage: Consider flow batteries or other technologies optimized for energy (rather than power) applications.\n")
+    
+    print("Battery C-rate analysis complete! Results saved to 'battery_c_rates_analysis.png' and 'battery_c_rates_analysis.txt'")
+    
+    return daily_stats
+
 if __name__ == "__main__":
     analyze_energy_data()
     create_solstice_comparison()
@@ -828,4 +961,6 @@ if __name__ == "__main__":
     analyze_battery_flows()
     analyze_annual_battery()
     analyze_annual_battery_empty()
+    analyze_battery_c_rates()
     analyze_annual_battery_empty()
+    analyze_battery_c_rates()
