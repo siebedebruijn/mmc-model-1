@@ -6,7 +6,7 @@ def read_csv_file():
     current_dir = os.path.dirname(os.path.abspath(__file__))
     
     # Define the CSV file path
-    csv_file = os.path.join(current_dir, "Aardehuizen_15min_ 2023 MMC dataset (1).csv")
+    csv_file = os.path.join(current_dir, "Aardehuizen_15min_ 2023 MMC dataset.csv")
     
     try:
         df = pd.read_csv(csv_file, 
