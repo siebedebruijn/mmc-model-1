@@ -425,7 +425,7 @@ def analyze_battery_flows():
         # Plot Summer Day Battery State
         plt.subplot(4, 1, 2)
         plt.plot(summer_data['Time'].dt.hour + summer_data['Time'].dt.minute/60,
-                 summer_data['Battery_State_Percent'], color='blue')
+                 summer_data['Battery_State_Percent'], color='purple', linewidth=2)
         plt.axhline(y=100, color='red', linestyle='--', label='Full Capacity')
         plt.axhline(y=0, color='red', linestyle='--', label='Empty')
         plt.title(f'June 1st, 2023 - Battery State of Charge (Initial: {initial_percent}%)')
@@ -457,7 +457,7 @@ def analyze_battery_flows():
         # Plot Winter Day Battery State
         plt.subplot(4, 1, 4)
         plt.plot(winter_data['Time'].dt.hour + winter_data['Time'].dt.minute/60,
-                 winter_data['Battery_State_Percent'], color='blue')
+                 winter_data['Battery_State_Percent'], color='purple', linewidth=2)
         plt.axhline(y=100, color='red', linestyle='--', label='Full Capacity')
         plt.axhline(y=0, color='red', linestyle='--', label='Empty')
         plt.title(f'December 21st, 2023 - Battery State of Charge (Initial: {initial_percent}%)')
@@ -537,9 +537,295 @@ def analyze_battery_flows():
     print("- battery_flows_100percent.png")
     print("- battery_flows_calculations.txt")
 
+def analyze_annual_battery():
+    # Read the cleaned data
+    df = pd.read_csv('cleaned_data.csv')
+    
+    # Convert Time to datetime
+    df['Time'] = pd.to_datetime(df['Time'])
+    
+    # Convert negative production values to positive
+    df['Pprod(W)'] = df['Pprod(W)'].abs()
+    
+    # Calculate energy in Wh (15-minute intervals)
+    df['Energy_Production_Wh'] = df['Pprod(W)'] * 0.25
+    df['Energy_Demand_Wh'] = df['Pdemand(W)'] * 0.25
+    
+    # Calculate power difference (battery flow)
+    df['Battery_Flow_W'] = df['Pprod(W)'] - df['Pdemand(W)']
+    
+    # Calculate energy flow in Wh (15-minute intervals)
+    df['Energy_Flow_Wh'] = df['Battery_Flow_W'] * 0.25
+    
+    # Battery capacity in Wh - 40 MWh = 40,000 kWh = 40,000,000 Wh
+    BATTERY_CAPACITY = 40 * 1000 * 1000  # 40 MWh in Wh
+    
+    # Initialize battery state at 50% (as requested)
+    initial_state = BATTERY_CAPACITY * 0.5
+    df['Battery_State_Wh'] = initial_state
+    
+    # Calculate battery state over time
+    for i in range(1, len(df)):
+        # Calculate new state based on previous state and current flow
+        new_state = df['Battery_State_Wh'].iloc[i-1] + df['Energy_Flow_Wh'].iloc[i]
+        # Clip to battery capacity limits
+        df.loc[df.index[i], 'Battery_State_Wh'] = max(0, min(new_state, BATTERY_CAPACITY))
+    
+    # Calculate percentage of capacity
+    df['Battery_State_Percent'] = (df['Battery_State_Wh'] / BATTERY_CAPACITY) * 100
+    
+    # Calculate daily averages for plotting (to reduce number of points in the graph)
+    daily_avg = df.groupby(df['Time'].dt.date).agg({
+        'Battery_State_Percent': 'mean',
+        'Battery_State_Wh': 'mean',
+        'Energy_Production_Wh': 'sum',
+        'Energy_Demand_Wh': 'sum',
+        'Energy_Flow_Wh': 'sum'
+    }).reset_index()
+    
+    # Convert to MWh for better readability
+    daily_avg['Battery_State_MWh'] = daily_avg['Battery_State_Wh'] / 1000 / 1000
+    daily_avg['Energy_Production_MWh'] = daily_avg['Energy_Production_Wh'] / 1000 / 1000
+    daily_avg['Energy_Demand_MWh'] = daily_avg['Energy_Demand_Wh'] / 1000 / 1000
+    daily_avg['Energy_Net_MWh'] = daily_avg['Energy_Flow_Wh'] / 1000 / 1000
+    
+    # Create the plot
+    plt.figure(figsize=(15, 10))
+    
+    # Plot 1: Battery State in MWh
+    plt.subplot(2, 1, 1)
+    plt.plot(daily_avg['Time'], daily_avg['Battery_State_MWh'], color='purple', linewidth=2)
+    plt.axhline(y=40, color='red', linestyle='--', alpha=0.5, label='Full Capacity (40 MWh)')
+    plt.axhline(y=0, color='red', linestyle='--', alpha=0.5, label='Empty')
+    plt.axhline(y=20, color='green', linestyle='--', alpha=0.5, label='50% Capacity (20 MWh)')
+    plt.title('40 MWh Battery State Throughout 2023 (Starting at 20 MWh)', fontsize=14)
+    plt.xlabel('Date')
+    plt.ylabel('Battery State (MWh)')
+    plt.ylim(-2, 42)
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    
+    # Plot 2: Daily Energy Production and Demand
+    plt.subplot(2, 1, 2)
+    plt.plot(daily_avg['Time'], daily_avg['Energy_Production_MWh'], label='Production', color='green')
+    plt.plot(daily_avg['Time'], daily_avg['Energy_Demand_MWh'], label='Demand', color='red')
+    plt.plot(daily_avg['Time'], daily_avg['Energy_Net_MWh'], label='Net (Production - Demand)', 
+             color='blue', linestyle='-', alpha=0.5)
+    plt.axhline(y=0, color='black', linestyle='-', alpha=0.3)
+    plt.title('Daily Energy Production and Demand', fontsize=14)
+    plt.xlabel('Date')
+    plt.ylabel('Energy (MWh)')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    
+    # Adjust layout and save plot
+    plt.tight_layout()
+    plt.savefig('annual_battery_simulation.png', dpi=300)
+    
+    # Save calculations to text file
+    with open('annual_battery_simulation.txt', 'w') as f:
+        f.write("Annual 40 MWh Battery Simulation (Starting at 50% Charge)\n")
+        f.write("=" * 60 + "\n\n")
+        
+        # Overall statistics
+        f.write("Overall Statistics:\n")
+        f.write("-" * 30 + "\n")
+        f.write(f"Battery Capacity: 40.00 MWh (40,000 kWh)\n")
+        f.write(f"Initial Charge: 20.00 MWh (50%)\n")
+        f.write(f"Final Charge: {df['Battery_State_Wh'].iloc[-1]/1000/1000:.2f} MWh ({df['Battery_State_Percent'].iloc[-1]:.2f}%)\n")
+        f.write(f"Minimum Charge: {df['Battery_State_Wh'].min()/1000/1000:.2f} MWh ({df['Battery_State_Percent'].min():.2f}%)\n")
+        f.write(f"Maximum Charge: {df['Battery_State_Wh'].max()/1000/1000:.2f} MWh ({df['Battery_State_Percent'].max():.2f}%)\n\n")
+        
+        # Count days at certain charge levels
+        empty_days = len(daily_avg[daily_avg['Battery_State_Percent'] < 5])
+        full_days = len(daily_avg[daily_avg['Battery_State_Percent'] > 95])
+        mid_days = len(daily_avg[(daily_avg['Battery_State_Percent'] >= 45) & (daily_avg['Battery_State_Percent'] <= 55)])
+        
+        f.write("Charge Level Statistics:\n")
+        f.write("-" * 30 + "\n")
+        f.write(f"Days near empty (<5%): {empty_days} days\n")
+        f.write(f"Days near full (>95%): {full_days} days\n")
+        f.write(f"Days near 50% (45-55%): {mid_days} days\n\n")
+        
+        # Seasonal analysis
+        seasons = {
+            'Winter': (1, 2, 12),
+            'Spring': (3, 4, 5),
+            'Summer': (6, 7, 8),
+            'Autumn': (9, 10, 11)
+        }
+        
+        f.write("Seasonal Analysis:\n")
+        f.write("-" * 30 + "\n")
+        
+        for season, months in seasons.items():
+            seasonal_data = df[df['Time'].dt.month.isin(months)]
+            avg_charge = seasonal_data['Battery_State_Percent'].mean()
+            avg_flow = seasonal_data['Energy_Flow_Wh'].mean() * 4 * 24 / 1000  # kWh per day
+            
+            f.write(f"\n{season}:\n")
+            f.write(f"Average Battery Charge: {avg_charge:.2f}%\n")
+            f.write(f"Average Daily Energy Flow: {avg_flow:.2f} kWh/day ")
+            if avg_flow > 0:
+                f.write("(net charging)\n")
+            else:
+                f.write("(net discharging)\n")
+        
+        f.write("\nNote: This simulation used a 40 MWh (40,000 kWh) battery starting at 50% charge.\n")
+        f.write("The seasonal storage analysis recommended a capacity of approximately 39,362 kWh,\n")
+        f.write("which is very close to the 40 MWh (40,000 kWh) used in this simulation.\n")
+    
+    print("Annual battery simulation complete! Results have been saved to 'annual_battery_simulation.png' and 'annual_battery_simulation.txt'")
+    
+    return daily_avg
+
+def analyze_annual_battery_empty():
+    # Read the cleaned data
+    df = pd.read_csv('cleaned_data.csv')
+    
+    # Convert Time to datetime
+    df['Time'] = pd.to_datetime(df['Time'])
+    
+    # Convert negative production values to positive
+    df['Pprod(W)'] = df['Pprod(W)'].abs()
+    
+    # Calculate energy in Wh (15-minute intervals)
+    df['Energy_Production_Wh'] = df['Pprod(W)'] * 0.25
+    df['Energy_Demand_Wh'] = df['Pdemand(W)'] * 0.25
+    
+    # Calculate power difference (battery flow)
+    df['Battery_Flow_W'] = df['Pprod(W)'] - df['Pdemand(W)']
+    
+    # Calculate energy flow in Wh (15-minute intervals)
+    df['Energy_Flow_Wh'] = df['Battery_Flow_W'] * 0.25
+    
+    # Battery capacity in Wh - 40 MWh = 40,000 kWh = 40,000,000 Wh
+    BATTERY_CAPACITY = 40 * 1000 * 1000  # 40 MWh in Wh
+    
+    # Initialize battery state at 0% (empty)
+    initial_state = 0
+    df['Battery_State_Wh'] = initial_state
+    
+    # Calculate battery state over time
+    for i in range(1, len(df)):
+        # Calculate new state based on previous state and current flow
+        new_state = df['Battery_State_Wh'].iloc[i-1] + df['Energy_Flow_Wh'].iloc[i]
+        # Clip to battery capacity limits
+        df.loc[df.index[i], 'Battery_State_Wh'] = max(0, min(new_state, BATTERY_CAPACITY))
+    
+    # Calculate percentage of capacity
+    df['Battery_State_Percent'] = (df['Battery_State_Wh'] / BATTERY_CAPACITY) * 100
+    
+    # Calculate daily averages for plotting (to reduce number of points in the graph)
+    daily_avg = df.groupby(df['Time'].dt.date).agg({
+        'Battery_State_Percent': 'mean',
+        'Battery_State_Wh': 'mean',
+        'Energy_Production_Wh': 'sum',
+        'Energy_Demand_Wh': 'sum',
+        'Energy_Flow_Wh': 'sum'
+    }).reset_index()
+    
+    # Convert to MWh for better readability
+    daily_avg['Battery_State_MWh'] = daily_avg['Battery_State_Wh'] / 1000 / 1000
+    daily_avg['Energy_Production_MWh'] = daily_avg['Energy_Production_Wh'] / 1000 / 1000
+    daily_avg['Energy_Demand_MWh'] = daily_avg['Energy_Demand_Wh'] / 1000 / 1000
+    daily_avg['Energy_Net_MWh'] = daily_avg['Energy_Flow_Wh'] / 1000 / 1000
+    
+    # Create the plot
+    plt.figure(figsize=(15, 10))
+    
+    # Plot 1: Battery State in MWh
+    plt.subplot(2, 1, 1)
+    plt.plot(daily_avg['Time'], daily_avg['Battery_State_MWh'], color='purple', linewidth=2)
+    plt.axhline(y=40, color='red', linestyle='--', alpha=0.5, label='Full Capacity (40 MWh)')
+    plt.axhline(y=0, color='red', linestyle='--', alpha=0.5, label='Empty')
+    plt.axhline(y=20, color='green', linestyle='--', alpha=0.5, label='50% Capacity (20 MWh)')
+    plt.title('40 MWh Battery State Throughout 2023 (Starting at 0 MWh)', fontsize=14)
+    plt.xlabel('Date')
+    plt.ylabel('Battery State (MWh)')
+    plt.ylim(-2, 42)
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    
+    # Plot 2: Daily Energy Production and Demand
+    plt.subplot(2, 1, 2)
+    plt.plot(daily_avg['Time'], daily_avg['Energy_Production_MWh'], label='Production', color='green')
+    plt.plot(daily_avg['Time'], daily_avg['Energy_Demand_MWh'], label='Demand', color='red')
+    plt.plot(daily_avg['Time'], daily_avg['Energy_Net_MWh'], label='Net (Production - Demand)', 
+             color='blue', linestyle='-', alpha=0.5)
+    plt.axhline(y=0, color='black', linestyle='-', alpha=0.3)
+    plt.title('Daily Energy Production and Demand', fontsize=14)
+    plt.xlabel('Date')
+    plt.ylabel('Energy (MWh)')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    
+    # Adjust layout and save plot
+    plt.tight_layout()
+    plt.savefig('annual_battery_simulation_0percent.png', dpi=300)
+    
+    # Save calculations to text file
+    with open('annual_battery_simulation_0percent.txt', 'w') as f:
+        f.write("Annual 40 MWh Battery Simulation (Starting at 0% Charge)\n")
+        f.write("=" * 60 + "\n\n")
+        
+        # Overall statistics
+        f.write("Overall Statistics:\n")
+        f.write("-" * 30 + "\n")
+        f.write(f"Battery Capacity: 40.00 MWh (40,000 kWh)\n")
+        f.write(f"Initial Charge: 0.00 MWh (0%)\n")
+        f.write(f"Final Charge: {df['Battery_State_Wh'].iloc[-1]/1000/1000:.2f} MWh ({df['Battery_State_Percent'].iloc[-1]:.2f}%)\n")
+        f.write(f"Minimum Charge: {df['Battery_State_Wh'].min()/1000/1000:.2f} MWh ({df['Battery_State_Percent'].min():.2f}%)\n")
+        f.write(f"Maximum Charge: {df['Battery_State_Wh'].max()/1000/1000:.2f} MWh ({df['Battery_State_Percent'].max():.2f}%)\n\n")
+        
+        # Count days at certain charge levels
+        empty_days = len(daily_avg[daily_avg['Battery_State_Percent'] < 5])
+        full_days = len(daily_avg[daily_avg['Battery_State_Percent'] > 95])
+        mid_days = len(daily_avg[(daily_avg['Battery_State_Percent'] >= 45) & (daily_avg['Battery_State_Percent'] <= 55)])
+        
+        f.write("Charge Level Statistics:\n")
+        f.write("-" * 30 + "\n")
+        f.write(f"Days near empty (<5%): {empty_days} days\n")
+        f.write(f"Days near full (>95%): {full_days} days\n")
+        f.write(f"Days near 50% (45-55%): {mid_days} days\n\n")
+        
+        # Seasonal analysis
+        seasons = {
+            'Winter': (1, 2, 12),
+            'Spring': (3, 4, 5),
+            'Summer': (6, 7, 8),
+            'Autumn': (9, 10, 11)
+        }
+        
+        f.write("Seasonal Analysis:\n")
+        f.write("-" * 30 + "\n")
+        
+        for season, months in seasons.items():
+            seasonal_data = df[df['Time'].dt.month.isin(months)]
+            avg_charge = seasonal_data['Battery_State_Percent'].mean()
+            avg_flow = seasonal_data['Energy_Flow_Wh'].mean() * 4 * 24 / 1000  # kWh per day
+            
+            f.write(f"\n{season}:\n")
+            f.write(f"Average Battery Charge: {avg_charge:.2f}%\n")
+            f.write(f"Average Daily Energy Flow: {avg_flow:.2f} kWh/day ")
+            if avg_flow > 0:
+                f.write("(net charging)\n")
+            else:
+                f.write("(net discharging)\n")
+        
+        f.write("\nNote: This simulation used a 40 MWh (40,000 kWh) battery starting at 0% charge.\n")
+        f.write("This shows how the battery would perform if starting completely empty at the beginning of the year.\n")
+    
+    print("Annual battery simulation (0% initial) complete! Results have been saved to 'annual_battery_simulation_0percent.png' and 'annual_battery_simulation_0percent.txt'")
+    
+    return daily_avg
+
 if __name__ == "__main__":
     analyze_energy_data()
     create_solstice_comparison()
     analyze_battery_sizing()
     analyze_seasonal_storage()
-    analyze_battery_flows() 
+    analyze_battery_flows()
+    analyze_annual_battery()
+    analyze_annual_battery_empty()
+    analyze_annual_battery_empty()
