@@ -358,6 +358,44 @@ def analyze_seasonal_storage():
     
     print("Seasonal storage analysis complete! Results have been saved to 'seasonal_storage_analysis.png' and 'seasonal_storage_calculations.txt'")
 
+def calculate_battery_state(day_data, initial_percent, battery_capacity=None):
+    """
+    Calculate battery state over time based on power flows and initial charge.
+    
+    Args:
+        day_data (DataFrame): DataFrame containing power production and demand data
+        initial_percent (float): Initial battery charge percentage (0-100)
+        battery_capacity (float, optional): Battery capacity in Wh. If None, uses 650 kWh.
+    
+    Returns:
+        DataFrame: Input DataFrame with additional battery state columns
+    """
+    # Default battery capacity if not provided
+    if battery_capacity is None:
+        battery_capacity = 650 * 1000  # 650 kWh in Wh
+    
+    # Calculate power difference (battery flow)
+    day_data['Battery_Flow_W'] = day_data['Pprod(W)'] - day_data['Pdemand(W)']
+    
+    # Calculate energy flow in Wh (15-minute intervals)
+    day_data['Energy_Flow_Wh'] = day_data['Battery_Flow_W'] * 0.25
+    
+    # Initialize battery state at specified percentage
+    initial_state = battery_capacity * (initial_percent / 100)
+    day_data['Battery_State_Wh'] = initial_state
+    
+    # Calculate battery state over time
+    for i in range(1, len(day_data)):
+        # Calculate new state based on previous state and current flow
+        new_state = day_data['Battery_State_Wh'].iloc[i-1] + day_data['Energy_Flow_Wh'].iloc[i]
+        # Clip to battery capacity limits
+        day_data.loc[day_data.index[i], 'Battery_State_Wh'] = max(0, min(new_state, battery_capacity))
+    
+    # Calculate percentage of capacity
+    day_data['Battery_State_Percent'] = (day_data['Battery_State_Wh'] / battery_capacity) * 100
+    
+    return day_data
+
 def analyze_battery_flows():
     # Read the cleaned data
     df = pd.read_csv('cleaned_data.csv')
@@ -374,29 +412,6 @@ def analyze_battery_flows():
     
     # Battery capacity in Wh
     BATTERY_CAPACITY = 650 * 1000  # 650 kWh in Wh
-    
-    def calculate_battery_state(day_data, initial_percent):
-        # Calculate power difference (battery flow)
-        day_data['Battery_Flow_W'] = day_data['Pprod(W)'] - day_data['Pdemand(W)']
-        
-        # Calculate energy flow in Wh (15-minute intervals)
-        day_data['Energy_Flow_Wh'] = day_data['Battery_Flow_W'] * 0.25
-        
-        # Initialize battery state at specified percentage
-        initial_state = BATTERY_CAPACITY * (initial_percent / 100)
-        day_data['Battery_State_Wh'] = initial_state
-        
-        # Calculate battery state over time
-        for i in range(1, len(day_data)):
-            # Calculate new state based on previous state and current flow
-            new_state = day_data['Battery_State_Wh'].iloc[i-1] + day_data['Energy_Flow_Wh'].iloc[i]
-            # Clip to battery capacity limits
-            day_data.loc[day_data.index[i], 'Battery_State_Wh'] = max(0, min(new_state, BATTERY_CAPACITY))
-        
-        # Calculate percentage of capacity
-        day_data['Battery_State_Percent'] = (day_data['Battery_State_Wh'] / BATTERY_CAPACITY) * 100
-        
-        return day_data
     
     def create_battery_plot(summer_data, winter_data, initial_percent, filename):
         # Create the plot
@@ -476,8 +491,8 @@ def analyze_battery_flows():
     filenames = ['battery_flows_0percent.png', 'battery_flows_50percent.png', 'battery_flows_100percent.png']
     
     for initial_state, filename in zip(initial_states, filenames):
-        summer_scenario = calculate_battery_state(summer_day.copy(), initial_state)
-        winter_scenario = calculate_battery_state(winter_day.copy(), initial_state)
+        summer_scenario = calculate_battery_state(summer_day.copy(), initial_state, BATTERY_CAPACITY)
+        winter_scenario = calculate_battery_state(winter_day.copy(), initial_state, BATTERY_CAPACITY)
         create_battery_plot(summer_scenario, winter_scenario, initial_state, filename)
     
     # Save calculations to text file

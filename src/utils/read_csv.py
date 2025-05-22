@@ -1,12 +1,15 @@
 import pandas as pd
 import os
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.config import RAW_DATA_PATH, CLEANED_DATA_PATH, ensure_directories
 
 def read_csv_file():
-    # Get the current directory
-    current_dir = os.path.dirname(os.path.abspath(__file__))
+    """Read and clean the raw Aardehuizen dataset."""
+    ensure_directories()
     
     # Define the CSV file path
-    csv_file = os.path.join(current_dir, "Aardehuizen_15min_ 2023 MMC dataset.csv")
+    csv_file = RAW_DATA_PATH
     
     try:
         df = pd.read_csv(csv_file, 
@@ -49,9 +52,9 @@ def read_csv_file():
         print(df.describe())
         
         # Save the cleaned data to a new CSV file
-        cleaned_csv = os.path.join(current_dir, "cleaned_data.csv")
-        df.to_csv(cleaned_csv, index=False)
-        print(f"\nCleaned data has been saved to: {cleaned_csv}")
+        # Save the cleaned data
+        df.to_csv(CLEANED_DATA_PATH, index=False)
+        print(f"\nCleaned data has been saved to: {CLEANED_DATA_PATH}")
         
         return df
         

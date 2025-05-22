@@ -2,20 +2,60 @@
 
 This repository contains Python scripts for analyzing energy production and demand data, visualizing seasonal and daily trends, and simulating battery storage requirements for a microgrid or similar system.
 
-## Contents
-- `analyze_energy.py`: Main script for energy analysis, visualization, and battery/storage calculations.
-- `read_csv.py`: Data preprocessing script that imports and cleans the Aardehuizen dataset.
-- `requirements.txt`: Python dependencies for running the analysis.
-- `.gitignore`: Excludes data, output, and temporary files from version control.
+## Project Structure
 
-## What the Code Does
-- **Data Preprocessing**: Cleans and formats raw energy data from the Aardehuizen dataset.
-- **Energy Analysis**: Calculates daily and seasonal energy production and demand patterns.
-- **Visualization**: Generates plots for daily/seasonal energy trends and battery operation.
-- **Battery Sizing**: Simulates battery charge/discharge for different scenarios and recommends optimal battery capacities.
-- **Seasonal Storage**: Analyzes seasonal energy imbalances and required storage capacity.
-- **C-Rate Analysis**: Calculates power requirements and C-rates for different storage applications.
-- **Solstice Comparison**: Compares energy flows on summer and winter solstice days.
+```
+mmc-model-1/
+├── src/
+│   ├── analysis/        # Analysis modules
+│   ├── visualization/   # Visualization modules
+│   ├── utils/          # Utility functions and configuration
+│   ├── data/           # Raw data storage
+│   └── main.py         # Main execution script
+├── outputs/
+│   ├── data/           # Processed data files
+│   ├── images/         # Generated plots and visualizations
+│   └── reports/        # Analysis reports and calculations
+├── setup.py            # Project setup script
+├── requirements.txt    # Python dependencies
+└── README.md          # Project documentation
+```
+
+## Features
+
+- **Data Preprocessing**: Clean and format raw energy data
+- **Energy Analysis**: 
+  - Daily production and demand patterns
+  - Seasonal energy variations
+  - Solar production time analysis
+- **Battery Sizing**:
+  - Daily storage requirements
+  - Seasonal storage optimization
+  - C-rate analysis
+  - Battery state simulation
+- **Visualizations**:
+  - Energy flow plots
+  - Solstice comparisons
+  - Battery state simulations
+  - Seasonal storage analysis
+
+## Project Setup
+
+1. Clone the repository
+2. Create a Python virtual environment:
+   ```bash
+   python -m venv env
+   source env/bin/activate
+   ```
+3. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+4. Run setup script to create required directories:
+   ```bash
+   python setup.py
+   ```
+5. Place your raw data in `src/data/` (CSV format)
 
 ## How to Run the Code
 
@@ -26,63 +66,75 @@ Make sure you have Python 3.8+ installed. Then, install the required packages:
 pip install -r requirements.txt
 ```
 
-### 2. Prepare Your Data
-Place your cleaned data file as `cleaned_data.csv` in the project directory. The CSV should have at least these columns:
-- `Time` (datetime)
-- `Pprod(W)` (production in Watts)
-- `Pdemand(W)` (demand in Watts)
+### Data Requirements
 
-### 2. Run the Data Preprocessing
-First, run the preprocessing script to convert the raw Aardehuizen dataset into a clean format:
+The input data file should be a CSV with the following columns:
+- `Time` (datetime format: DD/MM/YYYY HH:MM)
+- `Pprod(W)` (power production in Watts)
+- `Pdemand(W)` (power demand in Watts)
 
-```bash
-python read_csv.py
+### Running the Analysis
+
+1. **Preprocess the data**:
+   ```bash
+   python src/utils/read_csv.py
+   ```
+   This will:
+   - Clean and format the raw data
+   - Convert data types appropriately
+   - Handle missing values
+   - Save processed data to `outputs/data/cleaned_data.csv`
+
+2. **Run the complete analysis**:
+Run the main script to execute all analyses:
+
+```bash 
+python src/main.py
 ```
 
-This script performs several important tasks:
-- Imports the raw `Aardehuizen_15min_ 2023 MMC dataset.csv` file
-- Cleans and formats the time series data
-- Converts text data to the appropriate numerical formats
-- Handles missing or inconsistent values
-- Saves the processed data as `cleaned_data.csv`
+This will generate:
+- Daily and seasonal energy analyses
+- Battery sizing calculations
+- Visualizations and reports
 
-### 3. Run the Main Analysis
-Run the main script to generate all analyses and plots:
+### Output Files
 
-```bash
-python analyze_energy.py
-```
+All output files are organized in the `outputs` directory:
 
-This will:
-- Analyze daily and seasonal energy
-- Create visualizations (`.png` files)
-- Output calculation summaries (`.txt` files)
+**Images** (`outputs/images/`):
+- Energy flow visualizations
+  - `energy_analysis.png`: Daily production and demand
+  - `solstice_comparison.png`: Summer vs winter comparison
+  - `seasonal_storage_analysis.png`: Seasonal patterns
+- Battery analysis
+  - `battery_sizing_analysis.png`: Capacity requirements
+  - `battery_flows_*.png`: State simulations
+  - `battery_c_rates_analysis.png`: Power requirements
+  - `realistic_battery_sizing.png`: Time-based analysis
 
-### 4. Output Files
-The analysis generates multiple visualization and data files:
+**Reports** (`outputs/reports/`):
+- Analysis summaries
+  - `energy_analysis.txt`: Overall statistics
+  - `seasonal_storage_calculations.txt`: Storage requirements
+  - `solar_time_battery_sizing_report.md`: Detailed findings
+- Battery calculations
+  - `battery_sizing_calculations.txt`: Capacity analysis
+  - `realistic_battery_sizing.txt`: Time-based results
 
-**Visualization Files (.png):**
-- `energy_analysis.png`: Daily energy production and demand trends
-- `solstice_comparison.png`: Comparison of energy flows on summer and winter days
-- `battery_sizing_analysis.png`: Battery capacity sizing analysis
-- `seasonal_storage_analysis.png`: Seasonal storage requirement visualization
-- `battery_flows_*.png`: Battery state simulations with different initial charge levels
-- `annual_battery_simulation.png`: Year-long 40 MWh battery state simulation (50% initial)
-- `annual_battery_simulation_0percent.png`: Year-long simulation starting with empty battery
-- `battery_c_rates_analysis.png`: Required C-rates for daily and seasonal storage
+### Configuration
 
-**Data Summary Files (.txt):**
-- `energy_analysis.txt`: Summary of overall energy statistics
-- `battery_sizing_calculations.txt`: Detailed battery capacity requirements
-- `seasonal_storage_calculations.txt`: Seasonal energy imbalance analysis
-- `battery_flows_calculations.txt`: Battery operation statistics for sample days
-- `annual_battery_simulation.txt`: Annual cycle statistics for 40 MWh battery
-- `annual_battery_simulation_0percent.txt`: Analysis of battery starting at 0% charge
-- `battery_c_rates_analysis.txt`: Analysis of required charge/discharge rates
+Key settings can be adjusted in `src/utils/config.py`:
+- File paths and directories
+- Battery parameters
+- Analysis timeframes
 
-### 5. Script Order
-The main script (`analyze_energy.py`) runs all analyses in the correct order. You do not need to run the other scripts separately unless you want to customize or extend the analysis.
+## Contributing
 
-## Notes
-- The `.gitignore` is set to exclude `.txt` and `.png` output files (except `requirements.txt`).
-- If you want to analyze different days or change battery parameters, edit `analyze_energy.py` as needed.
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.

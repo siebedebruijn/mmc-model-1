@@ -5,9 +5,16 @@
 *.txt
 !requirements.txt 
 
+# Ignore all .md files except README.md
+*.md
+!README.md
+
+# Ignore data files
 *.csv
 *.xlsx
 *.xls
+
+# Ignore office documents
 *.docx
 *.doc
 *.pptx
